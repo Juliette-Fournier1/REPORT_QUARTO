@@ -2,7 +2,7 @@
 title: "Toward a blue world: Water source of life"
 subtitle: "Analysis of trends in global access to piped drinking water and link with life expectancy since 2000"
 author: "Juliette Fournier"
-date: 14/04/2023
+date: "2024-04-24"
 format: 
   html:
     theme: morph
