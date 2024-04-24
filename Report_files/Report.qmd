@@ -1,0 +1,163 @@
+---
+title: "Toward a blue world: Water source of life"
+subtitle: "Analysis of trends in global access to piped drinking water and link with life expectancy since 2000"
+author: "Juliette Fournier"
+date: 14/04/2023
+format: 
+  html:
+    theme: morph
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+<style>
+body {
+  font-family: "Times New Roman", Times, serif;
+}
+</style>
+
+```{r}
+#| label: setup
+#| include: false
+
+#libraries
+library(tidyverse)
+library(gapminder)
+library(ggplot2)
+library(dplyr)
+library(mapproj)
+library(countrycode)
+
+#data
+unicef_indicator_1.clean <- read.csv("~/Documents/NEOMA/4A/S2 - DCU/Data/Quarto Report - Juliette Fournier/Report_files/unicef_indicator_1 clean.csv", sep=";")
+unicef_indicator_2.clean <- read.csv("~/Documents/NEOMA/4A/S2 - DCU/Data/Quarto Report - Juliette Fournier/Report_files/unicef_indicator_2 clean.csv", sep=";")
+unicef_metadata.life.exp <- read.csv("~/Documents/NEOMA/4A/S2 - DCU/Data/Quarto Report - Juliette Fournier/Report_files/unicef_metadata life exp.csv", sep=";")
+
+#transformations
+
+data_join <- full_join(unicef_indicator_1.clean, unicef_metadata.life.exp, join_by(country == country, time_period == year))
+data_join <- full_join(unicef_indicator_1.clean, unicef_indicator_2.clean, join_by(country == country, time_period == time_period))
+
+data_join <- unicef_indicator_1.clean %>%
+  full_join(unicef_indicator_2.clean, by = c("country", "time_period")) %>%
+  full_join(unicef_metadata.life.exp, by = c("country", "time_period" = "year"))
+```
+
+<div style="text-align: justify;">
+*Access to piped drinking water, a crucial issue for mankind, has been a constant theme throughout history. From the ancient civilizations that developed sophisticated hydraulic infrastructures, to the modern challenges posed by population growth and dwindling resources, the issue of drinking water is part of a long story of progress and obstacles. While significant progress has been made, the situation remains worrying, and major disparities persist between regions and populations.*
+</div>
+
+### **Global Analysis**
+
+
+```{r}
+mean_water_access_time_series <- data_join %>%
+  group_by(time_period) %>%
+  summarize(mean_water_access = mean(obs_value.x, na.rm = TRUE))
+
+mean_life_expectancy_time_series <- data_join %>%
+  group_by(time_period) %>%
+  summarize(mean_life_expectancy = mean(Life.expectancy.at.birth..total..years., na.rm = TRUE))
+
+mean_data <- inner_join(mean_water_access_time_series, mean_life_expectancy_time_series, by = "time_period")
+
+mean_data <- mean_data[complete.cases(mean_data), ]
+
+ggplot(mean_data, aes(x = time_period)) +
+  geom_line(aes(y = mean_water_access, color = "Proportion of population using piped drinking water sources (%)")) +
+  geom_line(aes(y = mean_life_expectancy, color = "Life Expectancy at birth (years)")) +
+  labs(title = "Evolution of Global Piped Drinking Water Access and Life Expectancy (2000-2021)",
+       x = "Year",
+       y = "Variables",
+       color = "") +
+  scale_color_manual(values = c("Proportion of population using piped drinking water sources (%)" = "#85C1E9", "Life Expectancy at birth (years)" = "#577E57")) +
+  theme_minimal() +
+  xlim(2000, 2021) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"),
+        text = element_text(family = "Times New Roman"))
+```
+
+<div style="text-align: justify;">
+Over the past 20 years, the world has seen **remarkable progress in terms of access to drinking water**. The proportion of the world's population with access to safe drinking water has increased by **more than 10% since 2000**. In parallel with this improvement in access to drinking water, we have also seen an **increase in average life expectancy worldwide**. This **positive trend** is closely linked to access to drinking water, as clean water is essential to prevent diarrheal diseases, cholera and other water-related illnesses that disproportionately affect the poorest and most vulnerable populations.
+</div>
+
+```{r}
+pastel_red <- "#FF6969"
+pastel_blue <- "#85C1E9"
+
+world_map <- map_data("world")
+map_data_join <- full_join(data_join, world_map, by = c("country" = "region"))
+map_data_join_2021 <- map_data_join %>%
+  filter(time_period == 2021)
+
+ggplot(map_data_join_2021) +
+  aes(x = long, y = lat, group = group, fill = obs_value.x) +
+  geom_polygon(data = map_data_join) +
+  scale_fill_gradient(low = pastel_red, high = pastel_blue, name = "Proportion of population using piped drinking water sources (%)") +
+  theme_bw() +
+  labs(title = "The injustice of water: World map of access to piped drinking water in 2021",
+       x = "Longitude",
+       y = "Latitude") +
+  theme(legend.position = "bottom",
+        plot.title = element_text(face = "bold"),
+        text = element_text(family = "Times New Roman"))
+
+```
+
+### **Analysis by continent**
+
+
+```{r}
+country_list <- data.frame(country = as.character(countrycode::codelist$country.name.en),
+                           iso2 = countrycode::codelist$iso2c)
+
+country_list$continent <- countrycode(country_list$iso2, origin = "iso2c", destination = "continent")
+
+map_data_join_with_continent <- full_join(map_data_join, country_list, by = c("country" = "country"))
+
+continent_means_water_ok <- map_data_join_with_continent %>%
+  filter(!is.na(continent), time_period >= 2010, time_period <= 2021) %>%
+  group_by(continent, time_period) %>%
+  summarize(mean_water_access = mean(obs_value.x, na.rm = TRUE)) 
+
+ggplot(continent_means_water_ok, aes(x = factor(continent), y = mean_water_access, fill = factor(continent))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Mean access to piped drinking water by continent",
+       x = "",
+       y = "Proportion of population using piped drinking water sources (%)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ time_period, scales = "free_x") +
+  scale_fill_discrete(name = "Continent") +
+ theme(plot.title = element_text(face = "bold"),
+       text = element_text(family = "Times New Roman"))
+```
+
+<div style="text-align: justify;">
+While significant progress has been made in access to drinking water in recent decades, **major disparities persist between different regions of the world**. In 2021, **Europe** and **America** had the highest rates of access to drinking water. By contrast, **Asia**, **Africa** and **Oceania** were lagging far behind, with much lower access rates. These disparities can be explained by a combination of **socio-economic, political and geographical factors**. Low and middle income countries often have **less developed water infrastructures** and **limited financial resources to invest in access to drinking water**. Moreover, rural areas and marginalized populations are often the most disadvantaged in terms of access to safe water.
+</div>
+
+```{r}
+map_data_join_2021 <- map_data_join %>%
+  filter(time_period == 2021)
+
+map_data_join_2021_with_continent <- full_join(map_data_join_2021, country_list, by = c("country" = "country"))
+
+map_data_filtered <- map_data_join_2021_with_continent %>%
+  filter(!is.na(continent))
+
+ggplot(map_data_filtered, aes(x = Life.expectancy.at.birth..total..years., y = obs_value.x, color = continent)) +
+  geom_point() +
+  labs(title = "Access to piped drinking water and life expectancy: a vital relationship in 2021",
+       x = "Life Expectancy at birth (years)",
+       y = "Proportion of population using piped drinking water sources (%)",
+       color = "Continent") +
+  theme(plot.title = element_text(face = "bold"),
+       text = element_text(family = "Times New Roman"))
+```
+
+<div style="text-align: justify;">
+Disparities in access to drinking water between continents are accompanied by striking inequalities in life expectancy. **Inequalities in access to drinking water exacerbate inequalities in health and life expectancy.** Populations living in areas where access to clean water is limited often face **higher mortality rates**, particularly among children and the elderly. Indeed, **drinking water is essential to prevent water-borne diseases** such as diarrhea, cholera and typhoid, which are responsible for a significant number of deaths, particularly among children and vulnerable populations. It is also **essential for the absorption of nutrients and the prevention of dehydration**, which can lead to stunted growth and other health problems in children. Finally, access to drinking water **facilitates hygiene practices**, such as hand-washing, which are crucial in preventing the spread of disease. These inequalities in access to drinking water therefore contribute to **widening health disparities between countries and regions of the world**. The continents with the highest rates of access to drinking water, such as **Europe** and **America**, also have the longest life expectancies. Conversely, continents with the lowest rates of access to drinking water, such as **Africa** and **Oceania**, have the shortest life expectancies.
+</div>
